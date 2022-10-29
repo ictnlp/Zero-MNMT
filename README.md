@@ -2,7 +2,7 @@
 
 This code is based on the open source toolkit [fairseq-py](https://github.com/facebookresearch/fairseq).
 
-All the core codes of our method are put in the folders "/zs_nmt".
+All the core codes of our method are put in the folder "/zs_nmt".
 
 More detailed instructions are coming soon...
 
