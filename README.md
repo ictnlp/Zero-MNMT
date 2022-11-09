@@ -36,7 +36,7 @@ pip install --editable ./
 Following mRASP2, we also append special language tokens "LANG_TOK_XX" at the beginning of both the source and target sentences to indicate the language. Then we mix the multilingual data and train the model with the mixed data. 
 
 ### Training
-First, pre-train the model only with the cross-entropy loss
+Taking IWSLT as an example. First, pre-train the model only with the cross-entropy loss
 ```
 # path to data_bin
 data=
@@ -80,3 +80,109 @@ CUDA_VISIBLE_DEVICES=0,1,2,3  python fairseq_cli/train.py --ddp-backend=no_c10d 
  ```
 + *--max-update* is set as 100k for IWSLT and 300K for PC-6 and OPUS-7.
 + *--gamma1* and *--gamma2* are the hyperparameters of our method. 
+
+|dataset| gamma1 | gamma2 |
+|:----: | :----: | :----:|
+|IWSLT| 0.4 | 0.001 |
+|IWSLT-b | 0.2 | 0.002 |
+|PC-6 | 0.2 | 0.003|
+|OPUS-7 | 0.3 | 0.01|
+
+### Inference 
+Generate translation and compute BLEU with SacreBLEU tool \== 1.5.1 .
+```
+#!/bin/bash
+# root path of the moses toolkit.
+mosesdecoder=
+# path to the references
+dir=
+deit_de=$dir/de-it.de
+denl_de=$dir/de-nl.de
+dero_de=$dir/de-ro.de
+itde_it=$dir/it-de.it
+itnl_it=$dir/it-nl.it
+itro_it=$dir/it-ro.it
+nlde_nl=$dir/nl-de.nl
+nlit_nl=$dir/nl-it.nl
+nlro_nl=$dir/nl-ro.nl
+rode_ro=$dir/ro-de.ro
+roit_ro=$dir/ro-it.ro
+ronl_ro=$dir/ro-nl.ro
+
+mkdir -p BLEU
+
+gen_sen(){
+    CUDA_VISIBLE_DEVICES=$1 python fairseq_cli/generate.py data-bin/$2 --path $3 --gen-subset $4 --user-dir zs_nmt --lang-prefix-tok LANG_TOK_$6 --beam 5 --batch-size 500 --remove-bpe  --lenpen 0.6 --task translation_w_langtok  --fp16 | tee tmp/$5/gen.out.$(basename $3).$4
+    python choose-translation.py tmp/$5/gen.out.$(basename $3).$4 tmp/$5/$4.$(basename $3)
+    sed -e 's/.\{12\}//' < tmp/$5/$4.$(basename $3) > tmp/$5/$4.$(basename $3).notag
+    perl $mosesdecoder/scripts/tokenizer/detokenizer.perl -l `echo $6 | tr 'A-Z' 'a-z'` < tmp/$5/$4.$(basename $3).notag > tmp/$5/$4.$(basename $3).detok
+}
+#$1: GPU
+#$2: $data
+#$3: $file
+#$4: $subset
+#$5: $model
+#$6: language token
+#$7: time
+#$8: lang pair
+# databin for generation
+data=
+# dir for checkpoints
+model=
+mkdir -p tmp/$model
+out_file=BLEU/$model
+for file in ./checkpoints/$model/*
+do
+    echo $file >> $out_file
+    gen_sen 0 $data $file test $model IT  &
+    gen_sen 1 $data $file test1 $model NL  &
+    gen_sen 2 $data $file test2 $model RO  &
+    gen_sen 3 $data $file test3 $model DE  &
+    wait
+    gen_sen 0 $data $file test4 $model NL  &
+    gen_sen 1 $data $file test5 $model RO  &
+    gen_sen 2 $data $file test6 $model DE  &
+    gen_sen 3 $data $file test7 $model IT  &
+    wait
+    gen_sen 0 $data $file test8 $model RO  &
+    gen_sen 1 $data $file test9 $model DE  &
+    gen_sen 2 $data $file test10 $model IT  &
+    gen_sen 3 $data $file test11 $model NL  &
+    wait
+    declare -a bleu
+    sum=0.0
+    bleu[0]=`cat tmp/$model/test.$(basename $file).detok | sacrebleu $itde_it -w 2`
+    bleu[1]=`cat tmp/$model/test1.$(basename $file).detok | sacrebleu $nlde_nl -w 2`
+    bleu[2]=`cat tmp/$model/test2.$(basename $file).detok | sacrebleu $rode_ro -w 2`
+    bleu[3]=`cat tmp/$model/test3.$(basename $file).detok | sacrebleu $deit_de -w 2`
+    bleu[4]=`cat tmp/$model/test4.$(basename $file).detok | sacrebleu $nlit_nl -w 2`
+    bleu[5]=`cat tmp/$model/test5.$(basename $file).detok | sacrebleu $roit_ro -w 2`
+    bleu[6]=`cat tmp/$model/test6.$(basename $file).detok | sacrebleu $denl_de -w 2`
+    bleu[7]=`cat tmp/$model/test7.$(basename $file).detok | sacrebleu $itnl_it -w 2`
+    bleu[8]=`cat tmp/$model/test8.$(basename $file).detok | sacrebleu $ronl_ro -w 2`
+    bleu[9]=`cat tmp/$model/test9.$(basename $file).detok | sacrebleu $dero_de -w 2`
+    bleu[10]=`cat tmp/$model/test10.$(basename $file).detok | sacrebleu $itro_it -w 2`
+    bleu[11]=`cat tmp/$model/test11.$(basename $file).detok | sacrebleu $nlro_nl -w 2`
+    declare -a b
+    for ((i=0;i<${#bleu[*]};i++))
+    do
+        echo "${bleu[$i]}" >> $out_file
+        b[$i]=`echo ${bleu[$i]}|sed "s/.*1.5.1\ =\ \([0-9.]\{1,\}\).*/\1/"`
+        sum=`echo "scale=2;$sum+${b[$i]}"|bc`
+    done
+    avg=`echo "scale=2;$sum/${#b[*]}"|bc`
+    echo  "AVG  $avg" >> $out_file
+done
+```
+
+## Citation
+```
+@inproceedings{GuF22,
+  author    = {Shuhao Gu and
+               Yang Feng },
+  title     = {Improving Zero-Shot Multilingual Translation with Universal Representations and Cross-Mappings},
+  booktitle = {Proceedings of the EMNLP 2022 Long Findings},
+  year      = {2022},
+  url       = {https://arxiv.org/abs/2210.15851},
+}
+```
