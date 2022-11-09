@@ -13,7 +13,7 @@ This code is based on the open source toolkit [fairseq-py](https://github.com/fa
 
 All the core codes of our method are put in the folder "./zs_nmt".
 
-Codes related to the training objectives is in _label_smoothed_cross_entropy_adapter_zs.py_
+Codes related to the training objectives are in _label_smoothed_cross_entropy_adapter_zs.py_
 
 _translation_w_langtok.py_ is taken from [mRASP2](https://github.com/PANXiao1994/mRASP2) directly for generation.
 
