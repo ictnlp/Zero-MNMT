@@ -33,6 +33,7 @@ pip install --editable ./
 + PC-6: https://github.com/PANXiao1994/mRASP2
 + OPUS-7: https://opus.nlpl.eu/opus-100.php
 
+The dataset should be tokenized and performed with BPE first. 
 Following mRASP2, we also append special language tokens "LANG_TOK_XX" at the beginning of both the source and target sentences to indicate the language. Then we mix the multilingual data and train the model with the mixed data. 
 
 ### Training
