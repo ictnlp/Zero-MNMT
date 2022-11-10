@@ -106,7 +106,7 @@ class LabelSmoothedCrossEntropyCriterionZS(
     @staticmethod
     def add_args(parser):
         LabelSmoothedCrossEntropyCriterion.add_args(parser)
-        parser.add_argument('--pre-train', type=bool, default=False)
+        parser.add_argument('--pre-train', action="store_true")
         parser.add_argument("--gamma1", type=float,
                             default=0.0,
                             help="The SMD loss weight")
